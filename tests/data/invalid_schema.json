@@ -1,0 +1,13 @@
+{
+  "name": 123,
+  "version": "wrong",
+  "features": {
+    "enabled": "yes",
+    "list": [1, 1, 2],
+    "features": {
+      "enabled": "yes",
+      "list": [1, 1, 2]
+    }
+  }
+}
+

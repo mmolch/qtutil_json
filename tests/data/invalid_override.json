@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "features": {
+  xxx  "list": [3, 4], // <-- invalid JSON
+    "extra": "added"
+  }
+}
+

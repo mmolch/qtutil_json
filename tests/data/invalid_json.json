@@ -1,0 +1,5 @@
+{
+  "name": "BrokenConfig",
+  "value": 123,,   // <-- invalid JSON
+}
+

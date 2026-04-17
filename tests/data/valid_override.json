@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "features": {
+    "list": [3, 4],
+    "extra": "added"
+  }
+}
+

@@ -1,0 +1,9 @@
+{
+  "name": "BaseConfig",
+  "version": 1,
+  "features": {
+    "enabled": true,
+    "list": [1, 2, 3]
+  }
+}
+
