@@ -1,4 +1,4 @@
-# **mmolch_qtutil_json**
+# **qtutil_json**
 ### *Little helpers to load, merge, diff, and validate JSON objects with Qt*
 
 This library provides a small collection of utilities for working with JSON in Qt applications.
