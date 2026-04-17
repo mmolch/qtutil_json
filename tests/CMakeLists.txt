@@ -5,6 +5,7 @@ set(TESTS
     json_merge_basic
     json_validate_success
     json_validate_failure
+    json_validate
 )
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS
