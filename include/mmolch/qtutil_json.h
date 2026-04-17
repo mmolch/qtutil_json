@@ -10,6 +10,15 @@ namespace mmolch::qtutil {
 
 // JSON VALIDATE ======================================================================================================
 
+enum class JsonValidationOption : uint8_t {
+    None                 = 0,
+    IgnoreRequired       = 1 << 0, /**< Do not evaluate "required" properties */
+    IgnoreMinConstraints = 1 << 1  /**< Do not evaluate "minProperties" and "minItems" */
+};
+Q_DECLARE_FLAGS(JsonValidationOptions, JsonValidationOption)
+Q_DECLARE_OPERATORS_FOR_FLAGS(JsonValidationOptions)
+
+static constexpr JsonValidationOptions DefaultValidationOptions = JsonValidationOption::None;
 
 /**
  * @brief Validate a JSON object against a JSON Schema (Draft‑7‑like subset).
@@ -19,16 +28,17 @@ namespace mmolch::qtutil {
  * @return `JsonValidationResult` containing either success or a list of validation errors.
  */
 JsonValidationStatus jsonValidate(const QJsonObject &object,
-                                  const QJsonObject &schema);
+                                  const QJsonObject &schema,
+                                  JsonValidationOptions options = DefaultValidationOptions);
 
 
 // JSON DIFF ==========================================================================================================
 
 
 enum struct JsonDiffOption : uint8_t {
-    None          = 0,
-    Recursive     = 1 << 0, /**< Recurse into subobjects */
-    ExplicitNull  = 1 << 1  /**< Sets keys to null to indicate deleted keys */
+    None         = 0,
+    Recursive    = 1 << 0, /**< Recurse into subobjects */
+    ExplicitNull = 1 << 1  /**< Sets keys to null to indicate deleted keys */
 };
 Q_DECLARE_FLAGS(JsonDiffOptions, JsonDiffOption)
 Q_DECLARE_OPERATORS_FOR_FLAGS(JsonDiffOptions)
@@ -62,9 +72,9 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(JsonLoadOptions)
 static constexpr JsonLoadOptions DefaultLoadOptions = JsonLoadOption::None;
 
 enum class JsonMergeOption : uint8_t {
-    None            = 0,
-    Recursive       = 1 << 0,  /**< merge nested objects */
-    OverrideNull    = 1 << 1   /**< allow null in overrides to delete keys */
+    None         = 0,
+    Recursive    = 1 << 0,  /**< merge nested objects */
+    OverrideNull = 1 << 1   /**< allow null in overrides to delete keys */
 };
 Q_DECLARE_FLAGS(JsonMergeOptions, JsonMergeOption)
 Q_DECLARE_OPERATORS_FOR_FLAGS(JsonMergeOptions)
@@ -73,10 +83,11 @@ static constexpr JsonMergeOptions DefaultMergeOptions = JsonMergeOption::Recursi
                                                         JsonMergeOption::OverrideNull;
 
 enum class JsonValidationMode {
-    None,        /**< Do not validate at all */
-    PerFile,     /**< Fail fast: validate each file immediately after loading */
-    FinalResult, /**< Merge everything first, then validate the final merged object */
-    Both         /**< Validate each file upon load, merge them, then validate the final object */
+    None,                   /**< Do not validate at all */
+    PerFile,                /**< Fail fast: validate each file immediately after loading */
+    FinalResult,            /**< Merge everything first, then validate the final merged object */
+    Both,                   /**< Validate each file upon load, merge them, then validate the final object */
+    PartialPerFileAndFinal  /**< Loose validation on files, strict validation on the merged result */
 };
 
 static const JsonValidationMode DefaultValidationMode = JsonValidationMode::FinalResult;

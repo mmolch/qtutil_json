@@ -337,16 +337,24 @@ JsonProcessResult jsonLoadAndProcess(const QStringList &files,
         QJsonObject currentObj = loadResult.value();
 
         // 2. Per-File Validation
-        if (schema && (options.validationMode == JsonValidationMode::PerFile ||
-                       options.validationMode == JsonValidationMode::Both))
-        {
-            auto valResult = jsonValidate(currentObj, *schema);
-            if (!valResult) {
-                return std::unexpected(JsonProcessError{
-                    JsonErrorCode::SchemaViolation,
-                    QStringLiteral("Validation failed for file: %1").arg(file),
-                    std::move(valResult.error())
-                });
+        if (schema) {
+            bool doPartial = (options.validationMode == JsonValidationMode::PartialPerFileAndFinal);
+            bool doFull = (options.validationMode == JsonValidationMode::PerFile ||
+                           options.validationMode == JsonValidationMode::Both);
+
+            if (doPartial || doFull) {
+                // Apply flags if doing partial validation
+                auto valOptions = doPartial ? (JsonValidationOption::IgnoreRequired | JsonValidationOption::IgnoreMinConstraints)
+                                            : JsonValidationOption::None;
+
+                auto valResult = jsonValidate(currentObj, *schema, valOptions);
+                if (!valResult) {
+                    return std::unexpected(JsonProcessError{
+                        JsonErrorCode::SchemaViolation,
+                        QStringLiteral("Validation failed for file: %1").arg(file),
+                        std::move(valResult.error())
+                    });
+                }
             }
         }
 
@@ -367,7 +375,8 @@ JsonProcessResult jsonLoadAndProcess(const QStringList &files,
 
     // 4. Final Result Validation
     if (schema && (options.validationMode == JsonValidationMode::FinalResult ||
-                   options.validationMode == JsonValidationMode::Both))
+                   options.validationMode == JsonValidationMode::Both ||
+                   options.validationMode == JsonValidationMode::PartialPerFileAndFinal))
     {
         auto valResult = jsonValidate(result, *schema);
         if (!valResult) {

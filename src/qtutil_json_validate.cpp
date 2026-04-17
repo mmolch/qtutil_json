@@ -8,6 +8,7 @@
 #include <cmath>
 
 #include "mmolch/qtutil_json_error.h"
+#include "mmolch/qtutil_json.h"
 
 namespace mmolch::qtutil {
 
@@ -33,6 +34,7 @@ struct ValidationContext {
     QJsonObject rootSchema;
     QList<JsonValidationError>* errors = nullptr;
     QSet<QString> visitedRefs = QSet<QString>();
+    JsonValidationOptions options = JsonValidationOption::None;
 };
 
 static void addError(ValidationContext& ctx,
@@ -301,13 +303,15 @@ static bool validateArray(ValidationContext& ctx,
     QJsonArray arr = instance.toArray();
     const int size = arr.size();
 
-    if (schema.contains(QStringLiteral("minItems"))) {
-        int minItems = schema.value(QStringLiteral("minItems")).toInt();
-        if (size < minItems) {
-            addError(ctx, pointer,
-                     QStringLiteral("Array size %1 is less than minItems %2")
-                         .arg(size).arg(minItems));
-            ok = false;
+    if (!ctx.options.testFlag(JsonValidationOption::IgnoreMinConstraints)) {
+        if (schema.contains(QStringLiteral("minItems"))) {
+            int minItems = schema.value(QStringLiteral("minItems")).toInt();
+            if (size < minItems) {
+                addError(ctx, pointer,
+                         QStringLiteral("Array size %1 is less than minItems %2")
+                             .arg(size).arg(minItems));
+                ok = false;
+            }
         }
     }
 
@@ -401,13 +405,15 @@ static bool validateObject(ValidationContext& ctx,
     bool ok = true;
     QJsonObject obj = instance.toObject();
 
-    if (schema.contains(QStringLiteral("minProperties"))) {
-        int minProps = schema.value(QStringLiteral("minProperties")).toInt();
-        if (obj.size() < minProps) {
-            addError(ctx, pointer,
-                     QStringLiteral("Object has %1 properties, less than minProperties %2")
-                         .arg(obj.size()).arg(minProps));
-            ok = false;
+    if (!ctx.options.testFlag(JsonValidationOption::IgnoreMinConstraints)) {
+        if (schema.contains(QStringLiteral("minProperties"))) {
+            int minProps = schema.value(QStringLiteral("minProperties")).toInt();
+            if (obj.size() < minProps) {
+                addError(ctx, pointer,
+                         QStringLiteral("Object has %1 properties, less than minProperties %2")
+                             .arg(obj.size()).arg(minProps));
+                ok = false;
+            }
         }
     }
 
@@ -422,17 +428,17 @@ static bool validateObject(ValidationContext& ctx,
     }
 
     // required
-    if (schema.contains(QStringLiteral("required"))) {
-        QJsonArray req = schema.value(QStringLiteral("required")).toArray();
-        for (const QJsonValue& v : std::as_const(req)) {
-            if (!v.isString())
-                continue;
-
-            QString key = v.toString();
-            if (!obj.contains(key)) {
-                addError(ctx, pointer,
-                         QStringLiteral("Missing required property '%1'").arg(key));
-                ok = false;
+    if (!ctx.options.testFlag(JsonValidationOption::IgnoreRequired)) {
+        if (schema.contains(QStringLiteral("required"))) {
+            QJsonArray req = schema.value(QStringLiteral("required")).toArray();
+            for (const QJsonValue& v : std::as_const(req)) {
+                if (!v.isString()) continue;
+                QString key = v.toString();
+                if (!obj.contains(key)) {
+                    addError(ctx, pointer,
+                             QStringLiteral("Missing required property '%1'").arg(key));
+                    ok = false;
+                }
             }
         }
     }
@@ -690,10 +696,11 @@ bool validateSchema(ValidationContext &ctx,
 } // namespace
 
 JsonValidationStatus jsonValidate(const QJsonObject &object,
-                                   const QJsonObject &schema)
+                                  const QJsonObject &schema,
+                                  JsonValidationOptions options)
 {
     QList<JsonValidationError> errors;
-    ValidationContext ctx{schema, &errors};
+    ValidationContext ctx{schema, &errors, QSet<QString>(), options};
     const QString rootPointer;
 
     if (!validateSchema(ctx, rootPointer, object, schema)) {
