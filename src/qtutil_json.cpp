@@ -316,9 +316,83 @@ JsonObjectResult jsonLoad(const QString &path)
 // JSON PIPELINE
 // ---------------------------------------------------------------------------
 
+namespace {
+
+// Helper to translate the broad Mode into specific Option flags
+JsonValidationOptions getValOptions(JsonValidationMode mode) {
+    if (mode == JsonValidationMode::Partial) {
+        return JsonValidationOption::IgnoreRequired | JsonValidationOption::IgnoreMinConstraints;
+    }
+    return JsonValidationOption::None;
+}
+
+} // namespace
+
+// ---------------------------------------------------------------------------
+// IN-MEMORY PIPELINE
+// ---------------------------------------------------------------------------
+
+JsonProcessResult jsonProcess(const QList<QJsonObject> &objects,
+                              const QJsonObject *schema,
+                              JsonProcessOptions options)
+{
+    if (objects.isEmpty()) return QJsonObject{};
+
+    QJsonObject result;
+    bool isFirstObject = true;
+
+    for (int i = 0; i < objects.size(); ++i) {
+        const QJsonObject &currentObj = objects.at(i);
+
+        // 1. Input Validation
+        if (schema && options.inputValidationMode != JsonValidationMode::None) {
+            auto valResult = jsonValidate(currentObj, *schema, getValOptions(options.inputValidationMode));
+            if (!valResult) {
+                return std::unexpected(JsonProcessError{
+                    JsonErrorCode::SchemaViolation,
+                    QStringLiteral("Validation failed at input index %1").arg(i),
+                    std::move(valResult.error())
+                });
+            }
+        }
+
+        // 2. Merge
+        if (isFirstObject) {
+            result = currentObj;
+            isFirstObject = false;
+        } else {
+            auto mergeStatus = jsonMergeInplace(result, currentObj, schema, options.mergeOptions);
+            if (!mergeStatus) {
+                return std::unexpected(JsonProcessError{
+                    mergeStatus.error().code,
+                    QStringLiteral("Merge failed at input index %1: %2").arg(QString("%1").arg(i), mergeStatus.error().message)
+                });
+            }
+        }
+    }
+
+    // 3. Output Validation
+    if (schema && options.outputValidationMode != JsonValidationMode::None) {
+        auto valResult = jsonValidate(result, *schema, getValOptions(options.outputValidationMode));
+        if (!valResult) {
+            return std::unexpected(JsonProcessError{
+                JsonErrorCode::SchemaViolation,
+                QStringLiteral("Validation failed on final merged object."),
+                std::move(valResult.error())
+            });
+        }
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// I/O PIPELINE
+// ---------------------------------------------------------------------------
+
 JsonProcessResult jsonLoadAndProcess(const QStringList &files,
                                      const QJsonObject *schema,
-                                     JsonPipelineOptions options)
+                                     JsonLoadAndProcessOptions options)
 {
     QJsonObject result;
     bool isFirstFile = true;
@@ -329,41 +403,31 @@ JsonProcessResult jsonLoadAndProcess(const QStringList &files,
         auto loadResult = jsonLoad(file);
         if (!loadResult) {
             if (skipNonExisting && loadResult.error().code == JsonErrorCode::FileNotFound) {
-                continue;
+                continue; // Skip silently
             }
             return std::unexpected(JsonProcessError{loadResult.error().code, loadResult.error().message});
         }
 
         QJsonObject currentObj = loadResult.value();
 
-        // 2. Per-File Validation
-        if (schema) {
-            bool doPartial = (options.validationMode == JsonValidationMode::PartialPerFileAndFinal);
-            bool doFull = (options.validationMode == JsonValidationMode::PerFile ||
-                           options.validationMode == JsonValidationMode::Both);
-
-            if (doPartial || doFull) {
-                // Apply flags if doing partial validation
-                auto valOptions = doPartial ? (JsonValidationOption::IgnoreRequired | JsonValidationOption::IgnoreMinConstraints)
-                                            : JsonValidationOption::None;
-
-                auto valResult = jsonValidate(currentObj, *schema, valOptions);
-                if (!valResult) {
-                    return std::unexpected(JsonProcessError{
-                        JsonErrorCode::SchemaViolation,
-                        QStringLiteral("Validation failed for file: %1").arg(file),
-                        std::move(valResult.error())
-                    });
-                }
+        // 2. Input Validation (Fail Fast!)
+        if (schema && options.processOptions.inputValidationMode != JsonValidationMode::None) {
+            auto valResult = jsonValidate(currentObj, *schema, getValOptions(options.processOptions.inputValidationMode));
+            if (!valResult) {
+                return std::unexpected(JsonProcessError{
+                    JsonErrorCode::SchemaViolation,
+                    QStringLiteral("Validation failed for file: '%1'").arg(file),
+                    std::move(valResult.error())
+                });
             }
         }
 
-        // 3. Merge into aggregate result
+        // 3. Merge (Fail Fast!)
         if (isFirstFile) {
             result = std::move(currentObj);
             isFirstFile = false;
         } else {
-            auto mergeStatus = jsonMergeInplace(result, currentObj, schema, options.mergeOptions);
+            auto mergeStatus = jsonMergeInplace(result, currentObj, schema, options.processOptions.mergeOptions);
             if (!mergeStatus) {
                 return std::unexpected(JsonProcessError{
                     mergeStatus.error().code,
@@ -373,12 +437,9 @@ JsonProcessResult jsonLoadAndProcess(const QStringList &files,
         }
     }
 
-    // 4. Final Result Validation
-    if (schema && (options.validationMode == JsonValidationMode::FinalResult ||
-                   options.validationMode == JsonValidationMode::Both ||
-                   options.validationMode == JsonValidationMode::PartialPerFileAndFinal))
-    {
-        auto valResult = jsonValidate(result, *schema);
+    // 4. Output Validation
+    if (schema && options.processOptions.outputValidationMode != JsonValidationMode::None) {
+        auto valResult = jsonValidate(result, *schema, getValOptions(options.processOptions.outputValidationMode));
         if (!valResult) {
             return std::unexpected(JsonProcessError{
                 JsonErrorCode::SchemaViolation,

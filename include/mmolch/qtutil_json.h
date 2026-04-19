@@ -83,22 +83,20 @@ static constexpr JsonMergeOptions DefaultMergeOptions = JsonMergeOption::Recursi
                                                         JsonMergeOption::OverrideNull;
 
 enum class JsonValidationMode {
-    None,                   /**< Do not validate at all */
-    PerFile,                /**< Fail fast: validate each file immediately after loading */
-    FinalResult,            /**< Merge everything first, then validate the final merged object */
-    Both,                   /**< Validate each file upon load, merge them, then validate the final object */
-    PartialPerFileAndFinal  /**< Loose validation on files, strict validation on the merged result */
+    None,
+    Partial, /**< Loose validation (ignores "required", "minItems", "minProperties") */
+    Full     /**< Strict, complete validation */
 };
 
-static const JsonValidationMode DefaultValidationMode = JsonValidationMode::FinalResult;
-
-/**
- * @brief Configuration struct defining the behavior of the JSON processing pipeline.
- */
-struct JsonPipelineOptions {
-    JsonLoadOptions loadOptions = DefaultLoadOptions;
+struct JsonProcessOptions {
     JsonMergeOptions mergeOptions = DefaultMergeOptions;
-    JsonValidationMode validationMode = DefaultValidationMode;
+    JsonValidationMode inputValidationMode = JsonValidationMode::None;
+    JsonValidationMode outputValidationMode = JsonValidationMode::Full;
+};
+
+struct JsonLoadAndProcessOptions {
+    JsonLoadOptions loadOptions = DefaultLoadOptions;
+    JsonProcessOptions processOptions;
 };
 
 
@@ -146,21 +144,17 @@ JsonObjectResult jsonMerge(QJsonObject base,
 JsonObjectResult jsonLoad(const QString &path);
 
 /**
- * @brief High-level pipeline to load, merge, and validate multiple JSON files.
- *
- * Behavior:
- * - Iterates through @p files and loads them via `json_load()`.
- * - Handles missing files based on `options.loadOptions`.
- * - Merges loaded files sequentially using `json_merge_inplace()`.
- * - Validates against @p schema based strictly on `options.validationMode`.
- *
- * @param files List of JSON file paths.
- * @param schema Optional JSON schema. Required if `validationMode` is not `None`, or if schema merge strategies are needed.
- * @param options Configuration struct dictating load, merge, and validation behavior.
- * @return `JsonProcessResult` containing the final processed object or an error trace.
+ * @brief High-level pipeline to merge and validate a list of purely in-memory JSON objects.
+ */
+JsonProcessResult jsonProcess(const QList<QJsonObject> &objects,
+                              const QJsonObject *schema = nullptr,
+                              JsonProcessOptions options = {});
+
+/**
+ * @brief High-level pipeline to iteratively load, merge, and validate multiple JSON files.
  */
 JsonProcessResult jsonLoadAndProcess(const QStringList &files,
                                      const QJsonObject *schema = nullptr,
-                                     JsonPipelineOptions options = {});
+                                     JsonLoadAndProcessOptions options = {});
 
 } // namespace mmolch::qtutil
